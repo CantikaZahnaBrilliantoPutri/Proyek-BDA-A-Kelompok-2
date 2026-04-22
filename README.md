@@ -12,11 +12,11 @@
         docker compose up -d
 
    - Instalansi Library Python
-     Gunakan Virtual Environment dan instal dependensi yang dibutuhkan, yaitu:
+     Gunakan Virtual Environment dan instal dependensi yang dibutuhkan dengan kode:
      pip install -r requirements.txt
      
    - Menjalankan Pipeline
-     Jalankan script python untuk memindahkan data ke Data Lake dengan kode:
+     Jalankan script python untuk memindahkan data ke Data Lake, yaitu
      python ingest_to_datalake.py
      
    - Data Lake MinIO
