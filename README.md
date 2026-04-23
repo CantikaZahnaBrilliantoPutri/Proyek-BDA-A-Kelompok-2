@@ -28,7 +28,7 @@ Proyek ini berjalan di atas Docker dengan layanan:
   ```
   pip install -r requirements.txt
   ```
-6. Sebelum melakukan ingestion, pastikan database postgres sudah terisi data
+6. Sebelum melakukan ingestion, pastikan database postgres sudah terisi data (`count` tidak 0)
   ```
   docker exec -it postgres-kelompok2 psql -U postgres -d postgres -c "SELECT COUNT(*) FROM stock_move;"
   ```
@@ -37,7 +37,7 @@ Proyek ini berjalan di atas Docker dengan layanan:
   python scripts/ingest_to_datalake.py
   ```
 8. Data Lake MinIO
-  Setelah script dijalankan, data akan tersimpan di bucket datalake-kelompok2 dengan struktur berikut:
+  Setelah script dijalankan, data akan tersimpan di bucket `datalake-kelompok2` dengan struktur berikut:
   ```
   raw/
   ├── stock_transactions.csv (dari Postgres)
@@ -99,13 +99,13 @@ Hasil disimpan kembali ke MinIO dalam format Parquet pada folder `silver/`
   venv\Scripts\activate
   pip install -r requirements.txt
   ```
-2. Pastikan data sudah di-ingest ke MiniO. Buka [localhost:9000](http://localhost:9001/), pastikan sudah ada folder `raw`. Jika belum, jalankan ingestion terlebih dahulu
+2. Pastikan data sudah di-ingest ke bucket `datalake-kelompok2` di MiniO. Buka [localhost:9000](http://localhost:9001/), pastikan sudah ada folder `raw` di dalam bucket. Jika belum, jalankan ingestion terlebih dahulu
 3. Masuk ke dalam container `spark-processor` dan buka shell bash dengan menjalankan kode:
   ```
   docker exec -it spark-processor bash
   ```
 4. Setelah masuk ke dalam container (tampilan CLI menjadi `root@<container_id>:/app#`), jalankan kode berikut untuk memulai data cleaning dan pre-processing:
   ```
-  spark-submit /app/silver_pyspark.py
+  spark-submit /app/scripts/silver_pyspark.py
   ```
-5. Setelah proses selesai, buka MiniO ([localhost:9000](http://localhost:9001/)),  hasil processing tahap silver dapat dilihat di folder `silver`.
+5. Setelah muncul baris `s3a-file-system metrics system shutdown complete`, proses telah selesai. Buka/refresh MiniO ([localhost:9000](http://localhost:9001/)), hasil processing tahap silver dapat dilihat di folder `silver`.
