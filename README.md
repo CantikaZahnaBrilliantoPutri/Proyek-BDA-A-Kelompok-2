@@ -41,5 +41,34 @@ Proyek ini berjalan di atas Docker dengan layanan:
   raw/stock_transactions.csv (dari Postgres)
   raw/grocery-inventory.csv (dari Local CSV)
   raw/suppliers_info.json (dari Local JSON)
+  raw/
+  ├── stock_transactions.csv (dari Postgres)
+  ├── grocery-inventory.csv (dari Local CSV)
+  └── suppliers_info.json (dari Local JSON)
   ```
 ## Data Cleaning & Pre-Processing (Silver)
+1. Jalankan kode berikut untuk memastikan semua service sudah siap dan semua requirement sudah terinstall:
+  ```
+  docker compose up -d
+  venv\Scripts\activate
+  pip install -r requirements.txt
+  ```
+2. Pastikan data sudah di-ingest ke MiniO. Buka [localhost:9000](http://localhost:9001/), pastikan sudah ada folder `raw`. Jika belum, jalankan ingestion terlebih dahulu
+3. Masuk ke dalam container `spark-processor` dan buka shell bash dengan menjalankan kode:
+  ```
+  docker exec -it spark-processor bash
+  ```
+4. Setelah masuk ke dalam container (tampilan CLI menjadi `root@<container_id>:/app#`), jalankan kode berikut untuk memulai data cleaning dan pre-processing:
+  ```
+  spark-submit /app/silver_pyspark.py
+  ```
+5. Setelah proses selesai, buka MiniO ([localhost:9000](http://localhost:9001/)), dan hasil processing tahap silver dapat dilihat di folder `silver` dengan struktur berikut:
+  ```
+  silver/
+  ├── stock_transactions/
+  │   ├── _SUCCESS
+  │   └── part-00000-***.snappy.parquet
+  └── grocery_inventory/
+      ├── _SUCCESS
+      └── part-00000-***.snappy.parquet
+  ```
