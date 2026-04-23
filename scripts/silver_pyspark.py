@@ -3,7 +3,6 @@ from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql import types as T
 
-
 # fungsi untuk membuat spark session, konfigurasi MiniO S3A
 def make_spark(app_name: str = "silver-layer-processing"):
     # inisialisasi variabel
