@@ -4,6 +4,7 @@ Proyek ini berjalan di atas Docker dengan layanan:
 - **PostgreSQL** ---> Sebagai sumber data transaksional.
 - **MinIO** ---> Sebagai Object Storage (Data Lake).
 - **MinIO Client (MC)** ---> Untuk konfigurasi otomatis bucket.
+- **Apache Spark (PySpark)** ---> Untuk transformasi Bronze → Silver.
 ## Penyiapan Infrastruktur - Ingestion (Bronze)
 1. Clone repositori
   ```
@@ -38,15 +39,59 @@ Proyek ini berjalan di atas Docker dengan layanan:
 8. Data Lake MinIO
   Setelah script dijalankan, data akan tersimpan di bucket datalake-kelompok2 dengan struktur berikut:
   ```
-  raw/stock_transactions.csv (dari Postgres)
-  raw/grocery-inventory.csv (dari Local CSV)
-  raw/suppliers_info.json (dari Local JSON)
   raw/
   ├── stock_transactions.csv (dari Postgres)
   ├── grocery-inventory.csv (dari Local CSV)
   └── suppliers_info.json (dari Local JSON)
   ```
 ## Data Cleaning & Pre-Processing (Silver)
+### Deskripsi Umum Silver Layer
+Silver layer bertujuan untuk mengubah data raw (bronze) menjadi data yang lebih bersih, konsisten, dan siap dianalisis/diolah lanjut. Proses ini dijalankan menggunakan `PySpark`.
+
+#### Input (Bronze)
+Data dibaca dari MinIO bucket `datalake-kelompok2` pada folder `raw/`:
+```
+raw/stock_transactions.csv
+raw/grocery-inventory.csv
+raw/suppliers_info.json
+```
+
+#### Transformasi yang dilakukan
+1. **Standarisasi nama kolom** agar konsisten dan mudah digunakan untuk analisis
+    - Mengubah nama kolom menjadi huruf kecil (lowercase)
+    - Menghapus spasi di awal dan akhir
+    - Mengganti karakter pemisah seperti spasi / (-) menjadi underscore (_)
+
+2. **Trimming kolom bertipe string**
+    - Semua kolom string di-trim untuk menghilangkan whitespace yang tidak perlu
+
+3. **Parsing kolom tanggal/waktu**
+    - Kolom yang namanya mengandung kata date, `time`, atau `created` akan diubah menjadi tipe timestamp
+
+4. **Penanganan nilai `null`**
+    - Pada dataset inventory, kolom harga akan dicast menjadi numeric, nilai `null` akan diisi menggunakan median (pendekatan *percentile_approx*), lalu dilakukan *Deduplication* (menghapus data duplikat)
+
+5. **Data yang duplikat dihapus**
+    - jika ada kolom `id`, deduplikasi berdasarkan `id`
+    - jika tidak ada, deduplikasi berdasarkan seluruh baris
+    
+6. **Pembuatan ID transaksi jika tidak tersedia**
+    - Pada dataset transaksi, jika kolom `transaction_id` tidak ada, maka dibuat otomatis menggunakan `uuid()`
+
+#### Output (Silver)
+Hasil disimpan kembali ke MinIO dalam format Parquet pada folder `silver/`
+```
+  silver/
+  ├── stock_transactions/
+  │   ├── _SUCCESS
+  │   └── part-00000-***.snappy.parquet
+  └── grocery_inventory/
+      ├── _SUCCESS
+      └── part-00000-***.snappy.parquet
+  ```
+> Karena output ditulis oleh Spark, masing-masing folder berisi beberapa file part-*.parquet dan marker _SUCCESS
+
+### Cara Menjalankan Proyek
 1. Jalankan kode berikut untuk memastikan semua service sudah siap dan semua requirement sudah terinstall:
   ```
   docker compose up -d
@@ -62,13 +107,4 @@ Proyek ini berjalan di atas Docker dengan layanan:
   ```
   spark-submit /app/silver_pyspark.py
   ```
-5. Setelah proses selesai, buka MiniO ([localhost:9000](http://localhost:9001/)), dan hasil processing tahap silver dapat dilihat di folder `silver` dengan struktur berikut:
-  ```
-  silver/
-  ├── stock_transactions/
-  │   ├── _SUCCESS
-  │   └── part-00000-***.snappy.parquet
-  └── grocery_inventory/
-      ├── _SUCCESS
-      └── part-00000-***.snappy.parquet
-  ```
+5. Setelah proses selesai, buka MiniO ([localhost:9000](http://localhost:9001/)),  hasil processing tahap silver dapat dilihat di folder `silver`.
