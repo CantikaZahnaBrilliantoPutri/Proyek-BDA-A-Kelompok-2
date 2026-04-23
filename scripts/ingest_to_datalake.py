@@ -29,6 +29,17 @@ def upload_to_minio(df, object_name):
     s3_client.put_object(Bucket=BUCKET_NAME, Key=object_name, Body=csv_buffer.getvalue())
     print(f"✅ Berhasil upload {object_name} ke MinIO!")
 
+# perbaikan (by malika)
+def upload_file_bytes(local_path, object_name, content_type=None):
+    with open(local_path, "rb") as f:
+        s3_client.put_object(
+            Bucket=BUCKET_NAME,
+            Key=object_name,
+            Body=f.read(),
+            ContentType=content_type or "application/octet-stream"
+        )
+    print(f"✅ Berhasil upload {object_name} ke MinIO!")
+
 def main():
     # Pastikan bucket ada
     try:
@@ -49,9 +60,13 @@ def main():
     upload_to_minio(df_csv, "raw/grocery-inventory.csv")
 
     # C. Ambil data dari JSON
+    # print("Reading from local JSON...")
+    # df_json = pd.read_json("data/raw/suppliers_info.json")
+    # upload_to_minio(df_json, "raw/suppliers_info.json")
+
+    # perbaikan (by malika)
     print("Reading from local JSON...")
-    df_json = pd.read_json("data/raw/suppliers_info.json")
-    upload_to_minio(df_json, "raw/suppliers_info.json")
+    upload_file_bytes("data/raw/suppliers_info.json", "raw/suppliers_info.json", "application/json")
 
     print("\n✨ SEMUA PROSES INGESTION SELESAI!")
 
