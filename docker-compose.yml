@@ -28,21 +28,25 @@ services:
     depends_on:
       - minio-kelompok2
     entrypoint: >
-      /bin/sh -c "
-      until (/usr/bin/mc config host add local http://minio-kelompok2:9000 minioadmin minioadmin) do echo 'Waiting for MinIO...' && sleep 1; done;
-      exit 0;
+      /bin/sh -lc "
+      until mc alias set local http://minio-kelompok2:9000 minioadmin minioadmin; do echo 'Waiting for MinIO...' && sleep 1; done;
+      mc mb -p local/datalake-kelompok2 || true;
       "
-  
+
   spark-processor:
-    image: apache/spark:3.5.0
+    build:
+      context: .
+      dockerfile: Dockerfile.spark
     container_name: spark-processor
-    user: root
-    volumes:
-      - ./scripts:/opt/spark/scripts
-      - ./data:/opt/spark/data
     environment:
-      - SPARK_HOME=/opt/spark
-    entrypoint: ["tail", "-f", "/dev/null"]
+      MINIO_ENDPOINT: minio-kelompok2:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: datalake-kelompok2
     depends_on:
-      - postgres-kelompok2
       - minio-kelompok2
+      - postgres-kelompok2
+    volumes:
+      - ./:/app
+    working_dir: /app
+    entrypoint: ["bash", "-lc", "sleep infinity"]
