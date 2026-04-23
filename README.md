@@ -57,7 +57,7 @@ raw/suppliers_info.json
 ```
 
 #### Transformasi yang dilakukan
-1. **Standarisasi nama kolom** agar konsisten dan mudah digunakan untuk analisis
+1. **Standarisasi/Normalisasi nama kolom** agar konsisten dan mudah digunakan untuk analisis
     - Mengubah nama kolom menjadi huruf kecil (lowercase)
     - Menghapus spasi di awal dan akhir
     - Mengganti karakter pemisah seperti spasi / (-) menjadi underscore (_)
@@ -70,6 +70,7 @@ raw/suppliers_info.json
 
 4. **Penanganan nilai `null`**
     - Pada dataset inventory, kolom harga akan dicast menjadi numeric, nilai `null` akan diisi menggunakan median (pendekatan *percentile_approx*), lalu dilakukan *Deduplication* (menghapus data duplikat)
+    - Pada dataset transaksi, kolom `quantity` akan diubah tipe datanya menjadi double. Jika menghasilkan nilai `null`, maka nilainya akan di-set menjadi `0.0`
 
 5. **Data yang duplikat dihapus**
     - jika ada kolom `id`, deduplikasi berdasarkan `id`
