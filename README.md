@@ -27,11 +27,15 @@ Proyek ini berjalan di atas Docker dengan layanan:
   ```
   pip install -r requirements.txt
   ```
-6. Jalankan script python untuk memindahkan data ke Data Lake, yaitu
+6. Sebelum melakukan ingestion, pastikan database postgres sudah terisi data
   ```
-  python ingest_to_datalake.py
+  docker exec -it postgres-kelompok2 psql -U postgres -d postgres -c "SELECT COUNT(*) FROM stock_move;"
   ```
-7. Data Lake MinIO
+7. Jalankan script python untuk memindahkan data ke Data Lake, yaitu
+  ```
+  python scripts/ingest_to_datalake.py
+  ```
+8. Data Lake MinIO
   Setelah script dijalankan, data akan tersimpan di bucket datalake-kelompok2 dengan struktur berikut:
   ```
   raw/stock_transactions.csv (dari Postgres)
