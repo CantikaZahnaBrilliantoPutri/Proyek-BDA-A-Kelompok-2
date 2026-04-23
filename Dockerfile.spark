@@ -7,7 +7,6 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends python3 python3-pip curl && \
     rm -rf /var/lib/apt/lists/*
 
-# Install PySpark + dotenv (kalau di image ini pyspark belum tersedia via pip, tetap aman)
 RUN pip3 install --no-cache-dir pyspark==3.5.1 python-dotenv==1.0.1
 
 # Tambahkan dependency agar Spark bisa akses s3a:// (MinIO)
