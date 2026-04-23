@@ -87,6 +87,9 @@ Hasil disimpan kembali ke MinIO dalam format Parquet pada folder `silver/`
   │   ├── _SUCCESS
   │   └── part-00000-***.snappy.parquet
   └── grocery_inventory/
+  │   ├── _SUCCESS
+  │   └── part-00000-***.snappy.parquet
+  └── suppliers/
       ├── _SUCCESS
       └── part-00000-***.snappy.parquet
   ```
