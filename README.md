@@ -113,8 +113,6 @@ Hasil disimpan kembali ke MinIO dalam format Parquet pada folder `silver/`
   ```
 5. Setelah muncul baris `s3a-file-system metrics system shutdown complete`, proses telah selesai. Buka/refresh MiniO ([localhost:9000](http://localhost:9001/)), hasil processing tahap silver dapat dilihat di folder `silver`.
 
-Berikut lanjutan README yang langsung nyambung dari tahap **Silver (sudah dijalankan dengan spark-submit)** sampai **Gold + Modeling**. Format sudah disesuaikan biar bisa langsung kamu copas.
-
 ---
 
 ## Data Aggregation & Feature Engineering (Gold)
