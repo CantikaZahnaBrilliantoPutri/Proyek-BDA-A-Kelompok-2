@@ -112,3 +112,247 @@ Hasil disimpan kembali ke MinIO dalam format Parquet pada folder `silver/`
   spark-submit /app/scripts/silver_pyspark.py
   ```
 5. Setelah muncul baris `s3a-file-system metrics system shutdown complete`, proses telah selesai. Buka/refresh MiniO ([localhost:9000](http://localhost:9001/)), hasil processing tahap silver dapat dilihat di folder `silver`.
+
+Berikut lanjutan README yang langsung nyambung dari tahap **Silver (sudah dijalankan dengan spark-submit)** sampai **Gold + Modeling**. Format sudah disesuaikan biar bisa langsung kamu copas.
+
+---
+
+## Data Aggregation & Feature Engineering (Gold)
+
+### Deskripsi Umum Gold Layer
+
+Gold layer bertujuan untuk menghasilkan dataset yang siap digunakan untuk machine learning dengan melakukan:
+
+* Aggregasi data transaksi
+* Penggabungan antar tabel (inventory, transaksi, supplier)
+* Feature engineering
+* Penentuan target model (regresi & klasifikasi)
+
+#### Input (Silver)
+
+Data dibaca dari MinIO bucket `datalake-kelompok2` pada folder `silver/`:
+
+```
+silver/stock_transactions/
+silver/grocery_inventory/
+silver/suppliers/
+```
+
+#### Transformasi yang dilakukan
+
+1. **Aggregasi Transaksi**
+
+   * `sales_velocity`: total unit terjual dalam 30 hari terakhir
+   * `total_sales`: total unit terjual sepanjang waktu
+   * `transaction_frequency`: jumlah transaksi penjualan
+
+2. **Join Antar Tabel**
+
+   * Menggabungkan `grocery_inventory`, `stock_transactions`, dan `suppliers`
+   * Join berdasarkan `product_id` dan `supplier_id`
+
+3. **Feature Engineering**
+   Fitur yang dihasilkan antara lain:
+
+   * `sales_velocity`
+   * `stock_on_hand`
+   * `avg_daily_demand`
+   * `procurement_lead_time`
+   * `supplier_risk`
+   * `order_buffer_index`
+   * `stock_cover`
+   * `inventory_turnover_rate`
+   * `log_sales`
+   * `demand_to_stock_ratio`
+
+4. **Penentuan Target**
+
+   * **Regresi**: `reorder_point` (ROP optimal hasil kalkulasi)
+   * **Klasifikasi**: `stockout_risk`
+
+     * 1 = berisiko stockout
+     * 0 = aman
+
+#### Output (Gold)
+
+Hasil disimpan ke dalam MinIO pada folder `gold/`:
+
+```
+gold/
+├── features/
+├── aggregates/
+└── ml_ready/
+```
+
+* `features/` → hanya fitur (X)
+* `aggregates/` → ringkasan bisnis
+* `ml_ready/` → dataset final untuk modeling (X + Y)
+
+---
+
+### Cara Menjalankan Gold Layer
+
+1. Masuk ke dalam container Spark:
+
+```
+docker exec -it spark-processor bash
+```
+
+2. Jalankan script Gold:
+
+```
+spark-submit /app/scripts/gold_pyspark.py
+```
+
+3. Tunggu hingga proses selesai, ditandai dengan:
+
+```
+[FINISH] GOLD layer completed ✅✅✅
+```
+
+4. Cek hasil di MinIO:
+
+* Buka [http://localhost:9001/](http://localhost:9001/)
+* Masuk ke bucket `datalake-kelompok2`
+* Pastikan folder `gold/` sudah terisi
+
+---
+
+## Modeling (Machine Learning)
+
+### Deskripsi Umum Modeling
+
+Tahap ini menggunakan dataset `ml_ready` dari Gold untuk membangun dua model:
+
+1. **Random Forest Regressor**
+
+   * Tujuan: memprediksi `reorder_point` optimal
+
+2. **Random Forest Classifier**
+
+   * Tujuan: memprediksi `stockout_risk`
+
+#### Input
+
+```
+s3a://datalake-kelompok2/gold/ml_ready/
+```
+
+#### Output
+
+```
+s3a://datalake-kelompok2/gold/modeling_results/
+```
+
+Serta file visualisasi lokal:
+
+```
+plots/
+├── feature_importance.png
+└── confusion_matrix.png
+```
+
+---
+
+### Proses Modeling
+
+1. Data preparation (casting, handle null, vector assembler)
+2. Train-test split (80:20)
+3. Training model:
+
+   * Random Forest Regressor
+   * Random Forest Classifier
+4. Evaluasi model:
+
+   * Regresi: MAE, RMSE, R²
+   * Klasifikasi: AUC, Accuracy, Precision, Recall, F1
+5. Visualisasi:
+
+   * Feature importance
+   * Confusion matrix
+6. Generate output:
+
+   * Prediksi ROP optimal
+   * Probabilitas stockout
+   * Rekomendasi bisnis
+
+---
+
+### Cara Menjalankan Modeling
+
+1. Pastikan masih berada di dalam container Spark:
+
+```
+docker exec -it spark-processor bash
+```
+
+2. Jalankan script modeling:
+
+```
+spark-submit /app/scripts/modeling.py
+```
+
+3. Tunggu hingga proses selesai, ditandai dengan:
+
+```
+[FINISH] Modeling Pipeline selesai
+```
+
+---
+
+### Hasil Akhir
+
+#### 1. Dataset Hasil Modeling
+
+Tersimpan di:
+
+```
+gold/modeling_results/
+```
+
+Berisi:
+
+* `optimal_rop_pred`
+* `stockout_prediction`
+* `stockout_probability`
+* `recommendation`
+
+#### 2. Visualisasi
+
+Tersimpan di folder lokal dalam container:
+
+```
+plots/
+```
+
+Isi:
+
+* `feature_importance.png`
+* `confusion_matrix.png`
+
+#### 3. Insight Tambahan
+
+Script juga menampilkan:
+
+* Top 10 produk dengan risiko stockout tertinggi
+* Evaluasi performa model
+
+---
+
+## Ringkasan Alur Pipeline
+
+```
+PostgreSQL / CSV / JSON
+        ↓
+Bronze (raw)
+        ↓
+Silver (cleaned & standardized)
+        ↓
+Gold (features + target ML)
+        ↓
+Modeling (RF Regressor & Classifier)
+        ↓
+Output:
+  - Dataset hasil prediksi
+  - Visualisasi
+  - Insight bisnis
