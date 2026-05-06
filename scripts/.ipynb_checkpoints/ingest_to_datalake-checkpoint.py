@@ -56,8 +56,8 @@ def main():
 
     # B. Ambil data dari CSV
     print("Reading from local CSV...")
-    df_csv = pd.read_csv("data/raw/Grocery_Inventory.csv")
-    upload_to_minio(df_csv, "raw/Grocery_Inventory.csv")
+    df_csv = pd.read_csv("data/raw/grocery-inventory.csv")
+    upload_to_minio(df_csv, "raw/grocery-inventory.csv")
 
     # C. Ambil data dari JSON
     # print("Reading from local JSON...")

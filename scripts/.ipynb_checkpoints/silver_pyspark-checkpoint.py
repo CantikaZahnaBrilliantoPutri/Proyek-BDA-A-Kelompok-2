@@ -136,12 +136,12 @@ def main():
 
     # membuat path input di MinIO menggunakan skema s3a://
     bronze_stock = f"s3a://{bucket}/raw/stock_transactions.csv"
-    bronze_inventory = f"s3a://{bucket}/raw/Grocery_Inventory.csv"
+    bronze_inventory = f"s3a://{bucket}/raw/grocery-inventory.csv"
     bronze_suppliers = f"s3a://{bucket}/raw/suppliers_info.json"
 
     # membuat path output
     silver_stock = f"s3a://{bucket}/silver/stock_transactions/"
-    silver_inventory = f"s3a://{bucket}/silver/Grocery_Inventory/"
+    silver_inventory = f"s3a://{bucket}/silver/grocery_inventory/"
     silver_suppliers = f"s3a://{bucket}/silver/suppliers/"
 
     # membuat spark session
@@ -171,7 +171,7 @@ def main():
     # menghitung dan menampilkan jumlah baris hasil cleaning
     print("Silver counts:")
     print("stock_transactions:", df_stock_clean.count())
-    print("Grocery_Inventory:", df_inv_clean.count())
+    print("grocery_inventory:", df_inv_clean.count())
     print("suppliers:", df_sup_clean.count())
 
     # menghentikan spark session
