@@ -103,8 +103,9 @@ def clean_inventory(df):
     # definisikan kolom harga
     for candidate in ("price", "unit_price", "cost"):
         if candidate in df.columns:
-            # cast kolom harga jadi double
-            df = df.withColumn(candidate, F.col(candidate).cast("double"))
+            # hapus tanda '$' menggunakan regexp_replace
+            # cast hasilnya ke tipe 'double'
+            df = df.withColumn("unit_price", F.regexp_replace(F.col("unit_price"), r"\$", "").cast("double"))
             # hitung median (percentile_approx) untuk mengisi null
             median = df.select(F.expr(f"percentile_approx({candidate}, 0.5)").alias("med")).collect()[0]["med"]
             # kalau null, isi dengan median
