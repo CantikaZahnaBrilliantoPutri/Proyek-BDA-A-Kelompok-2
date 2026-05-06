@@ -21,3 +21,5 @@ RUN set -eux; \
       https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.262/aws-java-sdk-bundle-1.12.262.jar
 
 WORKDIR /app
+RUN pip install jupyter ipykernel
+EXPOSE 8888
