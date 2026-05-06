@@ -293,7 +293,7 @@ spark-submit /app/scripts/modeling.py
 3. Tunggu hingga proses selesai, ditandai dengan:
 
 ```
-[FINISH] Modeling Pipeline selesai
+[FINISH] Modeling Pipeline selesai ✅
 ```
 
 ---
