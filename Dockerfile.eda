@@ -1,0 +1,22 @@
+# Gunakan base image python yang ringan
+FROM python:3.11-slim
+
+# Set folder kerja di dalam container
+WORKDIR /app
+
+# Install library pendukung untuk grafik (diperlukan matplotlib di linux)
+RUN apt-get update && apt-get install -y \
+    libpng-dev \
+    libfreetype6-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy daftar library dan install
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy seluruh file proyek ke dalam container
+# (Opsional, karena nanti kita akan pakai volume mount untuk development)
+COPY . .
+
+# Saat container jalan, jangan biarkan dia langsung mati
+CMD ["tail", "-f", "/dev/null"]
