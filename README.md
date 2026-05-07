@@ -44,6 +44,13 @@ Proyek ini berjalan di atas Docker dengan layanan:
   ├── grocery-inventory.csv (dari Local CSV)
   └── suppliers_info.json (dari Local JSON)
   ```
+## EDA
+Jalankan kode berikut
+```bash
+docker-compose run --rm python-eda python scripts/eda.py
+```
+Hasil EDA dapat dilihat di folder eda_output
+
 ## Data Cleaning & Pre-Processing (Silver)
 ### Deskripsi Umum Silver Layer
 Silver layer bertujuan untuk mengubah data raw (bronze) menjadi data yang lebih bersih, konsisten, dan siap dianalisis/diolah lanjut. Proses ini dijalankan menggunakan `PySpark`.
