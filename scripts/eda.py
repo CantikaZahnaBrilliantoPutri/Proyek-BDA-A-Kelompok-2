@@ -10,10 +10,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import seaborn as sns
 # from scipy.stats import zscore
-from scipy.stats import normaltest
+from scipy.stats import normaltest, zscore
 from tabulate import tabulate
-
-from scipy.stats import zscore, shapiro
 
 load_dotenv()  # baca .env jika ada
 

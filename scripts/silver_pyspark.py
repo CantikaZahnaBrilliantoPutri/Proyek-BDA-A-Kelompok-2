@@ -100,6 +100,9 @@ def clean_inventory(df):
     df = normalize_columns(df)
     df = trim_string_columns(df)
 
+    # hilangkan % di kolom percentage
+    df = df.withColumn("percentage", F.regexp_replace(F.col("percentage"), r"%", "").cast("double"))
+
     # definisikan kolom harga
     for candidate in ("price", "unit_price", "cost"):
         if candidate in df.columns:

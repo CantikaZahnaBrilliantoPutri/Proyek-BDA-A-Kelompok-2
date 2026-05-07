@@ -44,12 +44,29 @@ Proyek ini berjalan di atas Docker dengan layanan:
   ├── grocery-inventory.csv (dari Local CSV)
   └── suppliers_info.json (dari Local JSON)
   ```
-## EDA
-Jalankan kode berikut
+## Exploratory Data Analysis (EDA)
+Exploratory Data Analysis meliputi 5 jenis pemeriksaan:
+1. Outlier Analysis -> Mengidentifikasi outlier dari semua sumber data
+2. Normality Test (D'Agostino K^2) -> Melihat apakah data terdistribusi normal
+3. Null Value Analysis -> Memeriksa apakah terdapat nilai null pada data
+4. Categorical & Encoding Analysis -> Memeriksa kolom kategorikal dan menentukan jenis encoding yang sesuai
+5. Class Imbalance Analysis -> Memeriksa imbalance data pada kolom target modelling
+
+Hasil dari kelima pemeriksaan tersebut adalah sebagai berikut:
+- Outlier Analysis -> Outlier hanya ada di `raw/stock_transactions.csv` kolom `quantity_change` 
+- Normality Test -> Semua data tidak terdistribusi normal
+- Null Value -> Tidak ada `null` value di kolom manapun
+- Categorical & Encoding -> Terdapat 18 kolom kategorikal, semua kolom telah diberi rekomendasi encoding
+- Imbalance -> Data imbalance hanya ada pada kolom `catagory` dan `transaction_type`
+
+Grafik plotting EDA dapat dilihat di folder `eda_output`
+
+### Cara Menjalankan
+Jalankan kode berikut di terminal:
 ```bash
 docker-compose run --rm python-eda python scripts/eda.py
 ```
-Hasil EDA dapat dilihat di folder eda_output
+Setelah proses selesai, akan muncul keterangan `[SELESAI] Semua plot disimpan secara terpisah di folder: eda_output/`
 
 ## Data Cleaning & Pre-Processing (Silver)
 ### Deskripsi Umum Silver Layer
@@ -75,6 +92,10 @@ raw/suppliers_info.json
 3. **Parsing kolom tanggal/waktu**
     - Kolom yang namanya mengandung kata date, `time`, atau `created` akan diubah menjadi tipe timestamp
 
+4. **Penghapusan simbol `$` dan `%`**
+    - Berdasarkan hasil EDA, kolom `percentage` dan `unit_price` dari data `Grocery_Inventory` terbaca sebagai kolom kategorikal karena memiliki simbol `$` dan `%`
+    - Simbol ini dihapus dengan menggunakan fungsi `regexp_replace`, sehingga kolom `percentage` dan `unit_price` dapat terbaca sebagai kolom numerik
+
 4. **Penanganan nilai `null`**
     - Pada dataset inventory, kolom harga akan dicast menjadi numeric, nilai `null` akan diisi menggunakan median (pendekatan *percentile_approx*), lalu dilakukan *Deduplication* (menghapus data duplikat)
     - Pada dataset transaksi, kolom `quantity` akan diubah tipe datanya menjadi double. Jika menghasilkan nilai `null`, maka nilainya akan di-set menjadi `0.0`
@@ -85,6 +106,10 @@ raw/suppliers_info.json
     
 6. **Pembuatan ID transaksi jika tidak tersedia**
     - Pada dataset transaksi, jika kolom `transaction_id` tidak ada, maka dibuat otomatis menggunakan `uuid()`
+
+7. **Penanganan outlier dengan metode *Capping*/*Winsorization***
+    - Hasil EDA menunjukkan ada `quantity_change` yang nilainya sangat besar (outlier), sehingga akan mengacaukan rata-rata. Karena di Gold Layer akan menghitung `sales_velocity` (rata-rata penjualan), maka outlier ini harus ditangani agar model Random Forest tidak memberikan prediksi `reorder_point` yang terlalu tinggi.
+    - Metode capping dipilih untuk mempersempit penyebaran data tanpa menghilangkan data penting di kolom `quantity_change`
 
 #### Output (Silver)
 Hasil disimpan kembali ke MinIO dalam format Parquet pada folder `silver/`
@@ -102,23 +127,41 @@ Hasil disimpan kembali ke MinIO dalam format Parquet pada folder `silver/`
   ```
 > Karena output ditulis oleh Spark, masing-masing folder berisi beberapa file part-*.parquet dan marker _SUCCESS
 
-### Cara Menjalankan Proyek
-1. Jalankan kode berikut untuk memastikan semua service sudah siap dan semua requirement sudah terinstall:
+Hasil dari metode Capping disimpan di folder terpisah, yaitu folder `eda_capping` di MiniO
+```
+  eda_capping/
+  └── stock_transactions/
+      ├── _SUCCESS
+      └── part-00000-***.snappy.parquet
   ```
+
+### Cara Menjalankan Proyek (Preprocessing)
+1. Jalankan kode berikut untuk memastikan semua service sudah siap dan semua requirement sudah terinstall:
+  ```bash
   docker compose up -d
   venv\Scripts\activate
   pip install -r requirements.txt
   ```
 2. Pastikan data sudah di-ingest ke bucket `datalake-kelompok2` di MiniO. Buka [localhost:9000](http://localhost:9001/), pastikan sudah ada folder `raw` di dalam bucket. Jika belum, jalankan ingestion terlebih dahulu
-3. Masuk ke dalam container `spark-processor` dan buka shell bash dengan menjalankan kode:
+3. Masuk ke dalam container `spark-processor` dan memulai data cleaning dan pre-processing:
+  ```bash
+  docker exec -it spark-processor spark-submit /app/scripts/silver_pyspark.py
   ```
-  docker exec -it spark-processor bash
-  ```
-4. Setelah masuk ke dalam container (tampilan CLI menjadi `root@<container_id>:/app#`), jalankan kode berikut untuk memulai data cleaning dan pre-processing:
-  ```
-  spark-submit /app/scripts/silver_pyspark.py
-  ```
-5. Setelah muncul baris `s3a-file-system metrics system shutdown complete`, proses telah selesai. Buka/refresh MiniO ([localhost:9000](http://localhost:9001/)), hasil processing tahap silver dapat dilihat di folder `silver`.
+4. Setelah muncul baris `s3a-file-system metrics system shutdown complete`, proses telah selesai. Buka/refresh MiniO ([localhost:9000](http://localhost:9001/)), hasil processing tahap silver dapat dilihat di folder `silver`.
+
+### Cara Menjalankan Proyek (Capping)
+Jalankan kode berikut:
+```bash
+docker exec -it spark-processor spark-submit /app/scripts/eda_capping.py     
+```
+Hasil capping disimpan di MiniO di folder `eda_capping`.
+
+Untuk memverifikasi hasil capping, jalankan kode berikut:
+```bash
+docker-compose run --rm python-eda python scripts/verifikasi_hasil_capping.py
+```
+
+Hasil verifikasi dapat dilihat di terminal, bandingkan output hasil capping dengan output EDA. Setelah capping, nilai MAX akan turun dan outlier berkurang. Plotting dari hasil capping dapat dilihat di folder proyek `verifikasi_capping_output`.
 
 ---
 
