@@ -9,7 +9,8 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import seaborn as sns
-from scipy.stats import zscore
+# from scipy.stats import zscore
+from scipy.stats import normaltest
 from tabulate import tabulate
 
 from scipy.stats import zscore, shapiro
@@ -97,9 +98,26 @@ def detect_outliers_iqr(s: pd.Series, k: float = 1.5):
 # fungsi normality
 def check_normality(s: pd.Series):
     s = s.dropna().astype(float)
-    if len(s) < 3: return "N/A", 0
-    stat, p = shapiro(s)
-    return ("Normal" if p > 0.05 else "Not Normal"), p
+    n = len(s)
+    
+    if n < 8: 
+        return "N/A (Too Small)", 0
+    
+    # Menggunakan D'Agostino's K^2 Test
+    # Cocok untuk sampel besar
+    stat, p = normaltest(s)
+    
+    status = "Normal" if p > 0.05 else "Not Normal"
+    
+    # Catatan: Pada N sangat besar, visualisasi (Histogram/QQ-Plot) 
+    # seringkali lebih jujur daripada uji statistik murni.
+    return status, p
+
+# def check_normality(s: pd.Series):
+#     s = s.dropna().astype(float)
+#     if len(s) < 3: return "N/A", 0
+#     stat, p = shapiro(s)
+#     return ("Normal" if p > 0.05 else "Not Normal"), p
 
 
 # fungsi null value
@@ -270,9 +288,6 @@ def main():
         imbalance_report = check_imbalance(df)
         imb_plot_dir = os.path.join(output_dir, "imbalance/", file_name) # Folder baru
         os.makedirs(imb_plot_dir, exist_ok=True)
-        
-        for item in imbalance_report:
-            all_imbalance.append([key] + item)
 
         for item in imbalance_report:
             all_imbalance.append([key] + item)
@@ -340,7 +355,7 @@ def main():
     print("\n" + "-"*80)
 
 
-    print("\n[2. NORMALITY TEST (Shapiro-Wilk)]")
+    print("\n[2. NORMALITY TEST (D'Agostino K^2)]")
     headers_norm = ["File Source", "Column", "Mean", "Median", "Is Normal?", "P-Value"]
     if all_normality:
         print(tabulate(all_normality, headers=headers_norm, tablefmt="fancy_grid", floatfmt=".2f"))
