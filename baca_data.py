@@ -6,7 +6,7 @@ spark = SparkSession.builder \
     .getOrCreate()
 
 # Baca file parquet
-path = "part-00000-9a75e407-9916-4233-9615-e97be8eb4d3c-c000.snappy.parquet"
+path = "part-00000-957436a1-c680-4499-9b3e-4f114472406f-c000.snappy.parquet"
 df = spark.read.parquet(path)
 
 # Menampilkan skema (nama kolom & tipe data)

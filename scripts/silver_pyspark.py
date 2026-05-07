@@ -58,13 +58,17 @@ def trim_string_columns(df):
 
 # fungsi untuk normalisasi kolom datetime
 def parse_datetime_columns_by_name(df):
+    formats = ("M/d/yyyy", "MM/d/yyyy", "M/dd/yyyy", "MM/dd/yyyy")
     for name, dtype in df.dtypes:
         lowered = name.lower()
         # kalau nama kolom mengandung date atau time atau created
         if any(k in lowered for k in ("date", "time", "created")):
             # kalay tipenya string, coba parse jadi timestamp dengan to_timestamp
             if dtype == "string":
-                df = df.withColumn(name, F.to_timestamp(F.col(name)))
+                df = df.withColumn(
+                    name, 
+                    F.coalesce(*[F.to_timestamp(F.col(name), fmt) for fmt in formats])
+                )
     return df
 
 
@@ -99,6 +103,7 @@ def clean_inventory(df):
     # panggil fungsi yang sudah dibuat di atas
     df = normalize_columns(df)
     df = trim_string_columns(df)
+    df = parse_datetime_columns_by_name(df)
 
     # hilangkan % di kolom percentage
     df = df.withColumn("percentage", F.regexp_replace(F.col("percentage"), r"%", "").cast("double"))
@@ -123,6 +128,7 @@ def clean_suppliers(df):
     # panggil fungsi yang sudah dibuat di atas
     df = normalize_columns(df)
     df = trim_string_columns(df)
+    df = parse_datetime_columns_by_name(df)
 
     # kalau tidak ada kolom supplier_id tapi ada id, rename id menjadi supplier_id supaya konsisten
     if "supplier_id" not in df.columns and "id" in df.columns:
