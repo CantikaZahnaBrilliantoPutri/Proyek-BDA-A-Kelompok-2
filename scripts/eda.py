@@ -283,15 +283,15 @@ def main():
             plot_categorical_dist(df, item[0], os.path.join(cat_plot_dir, f"dist_{item[0]}.png"))
 
         # proses imbalance
-        imbalance_report = check_imbalance(df)
-        imb_plot_dir = os.path.join(output_dir, "imbalance/", file_name) # Folder baru
-        os.makedirs(imb_plot_dir, exist_ok=True)
+        # imbalance_report = check_imbalance(df)
+        # imb_plot_dir = os.path.join(output_dir, "imbalance/", file_name) # Folder baru
+        # os.makedirs(imb_plot_dir, exist_ok=True)
 
-        for item in imbalance_report:
-            all_imbalance.append([key] + item)
-            # Plot Pie Chart (Proporsi/Imbalance)
-            # item[0] adalah nama kolom
-            plot_imbalance(df, item[0], os.path.join(imb_plot_dir, f"pie_{item[0]}.png"))
+        # for item in imbalance_report:
+        #     all_imbalance.append([key] + item)
+        #     # Plot Pie Chart (Proporsi/Imbalance)
+        #     # item[0] adalah nama kolom
+        #     plot_imbalance(df, item[0], os.path.join(imb_plot_dir, f"pie_{item[0]}.png"))
 
         # proses data numerik
         numeric_cols = df.select_dtypes(include="number").columns.tolist()
@@ -325,11 +325,11 @@ def main():
             ])
 
             # 2. Hitung Normalitas
-            norm_status, p_val = check_normality(df[col])
-            all_normality.append([
-                key, col, stats['mean'], stats['median'], 
-                norm_status, f"{p_val:.4f}"
-            ])
+            # norm_status, p_val = check_normality(df[col])
+            # all_normality.append([
+            #     key, col, stats['mean'], stats['median'], 
+            #     norm_status, f"{p_val:.4f}"
+            # ])
 
             # Simpan Plot PNG
             plot_box(df[col].dropna(), os.path.join(outlier_dir, f"boxplot_{col}.png"))
@@ -353,18 +353,18 @@ def main():
     print("\n" + "-"*80)
 
 
-    print("\n[2. NORMALITY TEST (D'Agostino K^2)]")
-    headers_norm = ["File Source", "Column", "Mean", "Median", "Is Normal?", "P-Value"]
-    if all_normality:
-        print(tabulate(all_normality, headers=headers_norm, tablefmt="fancy_grid", floatfmt=".2f"))
-    else:
-        print("Tidak ada data normalitas untuk ditampilkan.")
+    # print("\n[2. NORMALITY TEST (D'Agostino K^2)]")
+    # headers_norm = ["File Source", "Column", "Mean", "Median", "Is Normal?", "P-Value"]
+    # if all_normality:
+    #     print(tabulate(all_normality, headers=headers_norm, tablefmt="fancy_grid", floatfmt=".2f"))
+    # else:
+    #     print("Tidak ada data normalitas untuk ditampilkan.")
 
 
-    print("\n" + "-"*80)
+    # print("\n" + "-"*80)
 
 
-    print("\n[3. NULL VALUE ANALYSIS]")
+    print("\n[2. NULL VALUE ANALYSIS]")
     headers_missing = ["File Source", "Column", "Null Count", "Percentage"]
     if all_missing:
         print(tabulate(all_missing, headers=headers_missing, tablefmt="fancy_grid"))
@@ -375,7 +375,7 @@ def main():
     print("\n" + "-"*80)
 
 
-    print("\n[4. CATEGORICAL & ENCODING ANALYSIS]")
+    print("\n[3. CATEGORICAL & ENCODING ANALYSIS]")
     headers_cat = ["File Source", "Column", "Unique Values", "Most Frequent", "Encoding Suggestion"]
     if all_categorical:
         print(tabulate(all_categorical, headers=headers_cat, tablefmt="fancy_grid"))
@@ -383,16 +383,16 @@ def main():
         print("Tidak ada kolom kategorikal ditemukan.")
 
 
-    print("\n" + "-"*80)
+    # print("\n" + "-"*80)
 
 
-    print("\n[5. CLASS IMBALANCE ANALYSIS (Potential Targets)]")
-    headers_imb = ["File Source", "Column", "Majority (%)", "Minority (%)", "Status", "Note"]
-    if all_imbalance:
-        print(tabulate(all_imbalance, headers=headers_imb, tablefmt="fancy_grid"))
-        print("\n> Tip: Kolom dengan status 'Imbalanced' atau 'High Imbalance' perlu perhatian khusus jika dijadikan target model (misal: perlu SMOTE atau Class Weight).")
-    else:
-        print("Tidak ada kolom kategorikal yang cukup untuk dianalisis imbalance-nya.")
+    # print("\n[5. CLASS IMBALANCE ANALYSIS (Potential Targets)]")
+    # headers_imb = ["File Source", "Column", "Majority (%)", "Minority (%)", "Status", "Note"]
+    # if all_imbalance:
+    #     print(tabulate(all_imbalance, headers=headers_imb, tablefmt="fancy_grid"))
+    #     print("\n> Tip: Kolom dengan status 'Imbalanced' atau 'High Imbalance' perlu perhatian khusus jika dijadikan target model (misal: perlu SMOTE atau Class Weight).")
+    # else:
+    #     print("Tidak ada kolom kategorikal yang cukup untuk dianalisis imbalance-nya.")
 
 
     print("\n" + "="*80)
