@@ -3,3 +3,4 @@ venv/
 __pycache__/
 *.pyc
 pyvenv.cfg
+".ipynb_checkpoints/" 
