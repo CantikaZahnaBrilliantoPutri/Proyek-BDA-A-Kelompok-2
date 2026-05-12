@@ -134,7 +134,7 @@ def join_tables(df_inv, df_trx_agg, df_sup):
         )
 
         # Konfirmasi kolom kritis dari Grocery_Inventory ada
-        for c in ["reorder_level", "reorder_quantity", "stock_quantity",
+        for c in ["reorder_point_old", "reorder_quantity", "stock_quantity",
                   "date_received", "last_order_date", "sales_volume",
                   "inventory_turnover_rate"]:
             status = "✅ ditemukan" if c in df.columns else "⚠️  TIDAK ditemukan"
@@ -154,13 +154,13 @@ def build_features(df):
     Semua fitur dibangun dari kolom yang ada di kamus data:
 
     Grocery_Inventory  : stock_quantity, date_received, last_order_date,
-                         sales_volume, inventory_turnover_rate, reorder_level,
+                         sales_volume, inventory_turnover_rate, reorder_point_old,
                          reorder_quantity
     stock_transactions : sales_velocity (30d), total_sales, transaction_frequency
     suppliers_info     : sup_lead_time, sup_reliability
     """
     step = "Feature engineering"; log_start(step)
-    TOTAL = 10
+    TOTAL = 5
     try:
         # ── Kolom sumber ──────────────────────────────────────────────────────
         stock_qty   = F.col("stock_quantity").cast("double")          # stok fisik saat ini
@@ -168,40 +168,29 @@ def build_features(df):
                        .otherwise(F.col("sup_lead_time").cast("double"))
         reliability = F.col("sup_reliability").cast("double")         # 0–1
 
-        # ── Feature 1: sales_velocity (unit/30 hari) ─────────────────────────
-        # Sudah dari aggregate_transactions; cast agar konsisten
-        df = df.withColumn("sales_velocity",
-                F.coalesce(F.col("sales_velocity"), F.lit(0.0)).cast("double"))
-        log_feature("sales_velocity — unit terjual 30 hari terakhir", 1, TOTAL)
-
-        # ── Feature 2: stock_on_hand ──────────────────────────────────────────
+        # ── Feature 1: stock_on_hand ──────────────────────────────────────────
         # PERBAIKAN: langsung dari stock_quantity (stok fisik di gudang)
         # Tidak ditambah net transaksi karena stock_quantity adalah kondisi terkini
         df = df.withColumn("stock_on_hand", stock_qty)
-        log_feature("stock_on_hand — stok fisik terkini dari stock_quantity", 2, TOTAL)
+        log_feature("stock_on_hand — stok fisik terkini dari stock_quantity", 1, TOTAL)
 
-        # ── Feature 3: avg_daily_demand ───────────────────────────────────────
-        # Priority: sales_velocity (30d) → total_sales (all-time) → sales_volume → default
-        # Agar lebih bervariasi dan tidak terlalu banyak 0
-        demand_from_velocity = F.col("sales_velocity") / F.lit(30.0)
+        # ── Feature 2: avg_daily_demand ───────────────────────────────────────
+        # Priority: total_sales (all-time) → sales_volume → default
         demand_from_total = F.when(F.col("total_sales").isNotNull() & (F.col("total_sales") > 0),
                                    F.col("total_sales") / F.lit(365.0))
         demand_from_sales_vol = F.coalesce(F.col("sales_volume"), F.lit(0.0))
         
         df = df.withColumn("avg_daily_demand",
-                F.when(F.col("sales_velocity").isNotNull() & (F.col("sales_velocity") > 0),
-                       demand_from_velocity)
-                 .when(demand_from_total.isNotNull() & (demand_from_total > 0), 
+                F.when(demand_from_total.isNotNull() & (demand_from_total > 0), 
                        demand_from_total)
                  .when(demand_from_sales_vol > 0,
                        demand_from_sales_vol / F.lit(365.0))
                  .otherwise(F.lit(1.0))  # minimum default untuk hindari div-by-zero
                  .cast("double"))
-        log_feature("avg_daily_demand — velocity→total_sales→sales_volume (fallback: 1.0)", 3, TOTAL)
+        log_feature("avg_daily_demand — total_sales→sales_volume (fallback: 1.0)", 2, TOTAL)
 
-        # ── Feature 4: procurement_lead_time ─────────────────────────────────
+        # ── Feature 3: procurement_lead_time ─────────────────────────────────
         # Priority: lead time aktual → supplier lead time → default 5 hari
-        # Tambahkan variasi kecil dengan coefficient
         date_diff = F.when(
             F.col("date_received").isNotNull() & F.col("last_order_date").isNotNull(),
             F.datediff(F.to_date(F.col("date_received")), F.to_date(F.col("last_order_date")))
@@ -215,89 +204,55 @@ def build_features(df):
                         sup_lead
                     )
                 ).cast("double"))
-        log_feature("procurement_lead_time — actual→supplier (default: ≥1)", 4, TOTAL)
+        log_feature("procurement_lead_time — actual→supplier (default: ≥1)", 3, TOTAL)
 
-        # ── Feature 5: supplier_risk ──────────────────────────────────────────
+        # ── Feature 4: supplier_risk ──────────────────────────────────────────
         # 1 - reliability_index  (skala 0–1, makin tinggi makin berisiko)
         # Default 0.2 jika reliability tidak ada untuk variasi
         df = df.withColumn("supplier_risk",
                 F.greatest(F.lit(0.0),
                     F.least(F.lit(1.0),
                         (F.lit(1.0) - F.coalesce(reliability, F.lit(0.8))).cast("double"))))
-        log_feature("supplier_risk — 1 - reliability (default 0.2 jika null)", 5, TOTAL)
+        log_feature("supplier_risk — 1 - reliability (default 0.2 jika null)", 4, TOTAL)
 
-        # ── Feature 6: order_buffer_index ────────────────────────────────────
-        # Berapa hari stok cukup vs kecepatan jual (30d)
-        # Clip ke [0, 365] agar tidak ada outlier ekstrem
-        df = df.withColumn("order_buffer_index",
-                F.least(F.lit(365.0),
-                    F.when(F.col("sales_velocity") == 0, F.lit(0.0))
-                     .otherwise(
-                         (F.col("stock_on_hand") / F.col("sales_velocity")).cast("double")
-                     )))
-        log_feature("order_buffer_index — stok/sales_velocity, clip 365 hari", 6, TOTAL)
-
-        # ── Feature 7: stock_cover ────────────────────────────────────────────
-        # Berapa hari stok bertahan berdasarkan avg_daily_demand
-        df = df.withColumn("stock_cover",
-                F.when(F.col("avg_daily_demand") == 0, F.lit(0.0))
-                 .otherwise(
-                     (F.col("stock_on_hand") / F.col("avg_daily_demand")).cast("double")
-                 ))
-        log_feature("stock_cover — estimasi hari stok bertahan", 7, TOTAL)
-
-        # ── Feature 8: inventory_turnover_rate ───────────────────────────────
+        # ── Feature 5: inventory_turnover_rate ───────────────────────────────
         # Langsung dari Grocery_Inventory (sudah dihitung di sumber)
         df = df.withColumn("inventory_turnover_rate",
                 F.coalesce(F.col("inventory_turnover_rate"), F.lit(0.0)).cast("double"))
-        log_feature("inventory_turnover_rate — dari dataset asli Grocery_Inventory", 8, TOTAL)
+        log_feature("inventory_turnover_rate — dari dataset asli Grocery_Inventory", 5, TOTAL)
 
-        # ── Feature 9: log_sales ──────────────────────────────────────────────
-        # Log transform total_sales untuk mengurangi skewness
-        df = df.withColumn("log_sales",
-                F.log1p(F.coalesce(F.col("total_sales"), F.lit(0.0)).cast("double")))
-        log_feature("log_sales — log1p(total_sales) untuk kurangi skewness", 9, TOTAL)
-
-        # ── Feature 10: demand_to_stock_ratio ────────────────────────────────
-        df = df.withColumn("demand_to_stock_ratio",
-                F.when(F.col("stock_on_hand") == 0, F.lit(0.0))
-                 .otherwise(
-                     (F.col("avg_daily_demand") / F.col("stock_on_hand")).cast("double")
-                 ))
-        log_feature("demand_to_stock_ratio — avg_daily_demand / stock_on_hand", 10, TOTAL)
-
-        # ── reorder_level: langsung dari dataset (TARGET Regresi bukan) ───────
+        # ── reorder_point_old: langsung dari dataset (TARGET Regresi bukan) ───────
         # Dipakai sebagai FITUR referensi / info saja
-        df = df.withColumn("reorder_level",
-                F.coalesce(F.col("reorder_level"), F.lit(0.0)).cast("double"))
+        df = df.withColumn("reorder_point_old",
+                F.coalesce(F.col("reorder_point_old"), F.lit(0.0)).cast("double"))
 
         # ── reorder_quantity: langsung dari dataset (info EOQ asli) ──────────
         df = df.withColumn("reorder_quantity",
                 F.coalesce(F.col("reorder_quantity"), F.lit(0.0)).cast("double"))
 
-        # ── TARGET Regresi: reorder_point (ROP optimal kalkulasi) ─────────────
-        # Formula: max(reorder_level, ceil(demand × lead_time × (1 + risk_buffer)))
-        # Pastikan hasil > 0 dengan menggunakan reorder_level sebagai minimum
+        # ── TARGET Regresi: reorder_point_new (ROP optimal kalkulasi) ─────────────
+        # Formula: max(reorder_point_old, ceil(demand × lead_time × (1 + risk_buffer)))
+        # Pastikan hasil > 0 dengan menggunakan reorder_point_old sebagai minimum
         rop_calc = (
             F.col("avg_daily_demand")
             * F.col("procurement_lead_time")
             * (F.lit(1.0) + F.col("supplier_risk") * F.lit(0.5))
         )
-        df = df.withColumn("reorder_point",
+        df = df.withColumn("reorder_point_new",
                 F.greatest(
-                    F.coalesce(F.col("reorder_level"), F.lit(1.0)),
+                    F.coalesce(F.col("reorder_point_old"), F.lit(1.0)),
                     F.ceil(rop_calc).cast("double")
                 ))
-        print(f"  [✅ TARGET REGRESI] reorder_point = max(reorder_level, ceil(demand × lead_time × (1 + 0.5×risk)))")
+        print(f"  [✅ TARGET REGRESI] reorder_point_new = max(reorder_point_old, ceil(demand × lead_time × (1 + 0.5×risk)))")
 
         # ── TARGET Klasifikasi: stockout_risk ─────────────────────────────────
-        # 1 = stock_on_hand < reorder_point  → perlu segera order
+        # 1 = stock_on_hand < reorder_point_new  → perlu segera order
         # 0 = stok masih aman
         df = df.withColumn("stockout_risk",
-                F.when(F.col("stock_on_hand") < F.col("reorder_point"), F.lit(1))
+                F.when(F.col("stock_on_hand") < F.col("reorder_point_new"), F.lit(1))
                  .otherwise(F.lit(0))
                  .cast("int"))
-        print(f"  [✅ TARGET KLASIFIKASI] stockout_risk = 1 jika stock_on_hand < reorder_point")
+        print(f"  [✅ TARGET KLASIFIKASI] stockout_risk = 1 jika stock_on_hand < reorder_point_new")
 
         log_success(step)
         return df
@@ -311,38 +266,32 @@ def build_features(df):
 def select_ml_columns(df):
     """
     Kolom X (fitur):
-        sales_velocity, stock_on_hand, avg_daily_demand, procurement_lead_time,
-        supplier_risk, order_buffer_index, stock_cover,
-        inventory_turnover_rate, log_sales, demand_to_stock_ratio,
+        stock_on_hand, avg_daily_demand, procurement_lead_time,
+        supplier_risk, inventory_turnover_rate,
         total_sales, transaction_frequency,
-        reorder_level, reorder_quantity   ← info dari dataset asli
+        reorder_point_old, reorder_quantity   ← info dari dataset asli
 
     Target Y:
-        reorder_point  ← RF Regressor  (ROP optimal kalkulasi)
-        stockout_risk  ← RF Classifier (0 = aman, 1 = berisiko)
+        reorder_point_new  ← RF Regressor  (ROP optimal kalkulasi)
+        stockout_risk      ← RF Classifier (0 = aman, 1 = berisiko)
     """
     step = "Select final ML columns"; log_start(step)
     try:
         final_cols = [
             "product_id",
             # ── Fitur (X) ──────────────────────────────
-            "sales_velocity",
             "stock_on_hand",
             "avg_daily_demand",
             "procurement_lead_time",
             "supplier_risk",
-            "order_buffer_index",
-            "stock_cover",
             "inventory_turnover_rate",
-            "log_sales",
-            "demand_to_stock_ratio",
             "total_sales",
             "transaction_frequency",
             # ── Referensi dari dataset asli ────────────
-            "reorder_level",       # ROP asli di dataset (bukan target, hanya referensi)
-            "reorder_quantity",    # EOQ asli
+            "reorder_point_old",       # ROP asli di dataset (bukan target, hanya referensi)
+            "reorder_quantity",        # EOQ asli
             # ── Target (Y) ─────────────────────────────
-            "reorder_point",       # ← TARGET RF Regressor
+            "reorder_point_new",   # ← TARGET RF Regressor
             "stockout_risk",       # ← TARGET RF Classifier
         ]
 
@@ -404,7 +353,7 @@ def main():
 
     # ── Pecah output ─────────────────────────────────────────────────────────
     # features  : semua fitur X (tanpa target)
-    df_features_only = df_ml.drop("stockout_risk", "reorder_point")
+    df_features_only = df_ml.drop("stockout_risk", "reorder_point_new")
 
     # aggregates: ringkasan bisnis per produk
     df_aggregates = df_ml.select(
@@ -412,9 +361,9 @@ def main():
         "total_sales",
         "avg_daily_demand",
         "transaction_frequency",
-        "reorder_level",           # ROP asli dari dataset
+        "reorder_point_old",       # ROP asli dari dataset
         "reorder_quantity",        # EOQ asli dari dataset
-        "reorder_point",           # ROP optimal (output Regressor)
+        "reorder_point_new",       # ROP optimal (output Regressor)
         "stockout_risk",           # label risiko (output Classifier)
     )
 
@@ -439,15 +388,15 @@ def main():
 
     df_ml.unpersist()
 
-    print("\n[FINISH] GOLD layer completed ✅✅✅")
+    print("\n[✨ FINISH] GOLD layer completed ✅✅✅")
     print("  ┌──────────────────────────────────────────────────────────────┐")
     print("  │  TARGET MODEL                                                │")
-    print("  │  reorder_point  → RF Regressor  (ROP optimal kalkulasi)     │")
-    print("  │  stockout_risk  → RF Classifier (0 = aman, 1 = berisiko)    │")
+    print("  │  reorder_point_new  → RF Regressor  (ROP optimal kalkulasi)  │")
+    print("  │  stockout_risk      → RF Classifier (0 = aman, 1 = berisiko) │")
     print("  │                                                              │")
     print("  │  REFERENSI DATASET ASLI                                      │")
-    print("  │  reorder_level    → ROP original dari Grocery_Inventory     │")
-    print("  │  reorder_quantity → EOQ original dari Grocery_Inventory     │")
+    print("  │  reorder_point_old  → ROP original dari Grocery_Inventory    │")
+    print("  │  reorder_quantity   → EOQ original dari Grocery_Inventory    │")
     print("  └──────────────────────────────────────────────────────────────┘")
 
     spark.stop()
