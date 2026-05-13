@@ -62,13 +62,14 @@ Hasil dari kelima pemeriksaan tersebut adalah sebagai berikut:
 Grafik plotting EDA dapat dilihat di folder `eda_output`
 
 ### Tindak Lanjut EDA
-- Berdasarkan Outlier Analysis IQR, ditemukan sangat banyak outlier pada kolom `quantity_change`. Namun, setelah diverifikasi, nilai-nilai tersebut adalah transaksi stok masuk yang valid secara bisnis. Mengingat model yang digunakan adalah **Random Forest** yang bersifat robust terhadap outlier, maka diputuskan untuk tidak melakukan capping guna mempertahankan informasi asli ini.
+- Berdasarkan Outlier Analysis IQR, ditemukan sangat banyak outlier pada kolom `quantity_change`. Namun, setelah diverifikasi, nilai-nilai tersebut adalah transaksi stok masuk yang valid secara bisnis. Penanganan outlier akan dilakukan dengan metode capping.
 
 - Meskipun data tidak berdistribusi normal, data ini juga tidak perlu dinormalisasi karena Random Forest tidak mensyaratkan data untuk bersifat normal.
 
 - Terdapat beberapa kolom yang seharusnya bukan kategorikal tetapi terbaca sebagai kolom kategorikal, misalnya kolom `unit_price` dan `receive_date`. Oleh karena itu, kolom-kolom ini akan dicasting ke tipe yang sesuai pada preprocessing silver layer.
 
 - Penanganan data imbalance akan dilakukan sebelum modelling.
+
 
 ### Cara Menjalankan
 Jalankan kode berikut di terminal:
@@ -116,6 +117,11 @@ raw/suppliers_info.json
 7. **Pembuatan ID transaksi jika tidak tersedia**
     - Pada dataset transaksi, jika kolom `transaction_id` tidak ada, maka dibuat otomatis menggunakan `uuid()`
 
+8. **Penanganan outlier dengan metode *Capping*/*Winsorization***
+    - Hasil EDA menunjukkan ada `quantity_change` yang nilainya sangat besar (outlier), sehingga akan mengacaukan rata-rata. Karena di Gold Layer akan menghitung `sales_velocity` (rata-rata penjualan), maka outlier ini harus ditangani agar model Random Forest tidak memberikan prediksi `reorder_point` yang terlalu tinggi.
+    - Metode capping dipilih untuk mempersempit penyebaran data tanpa menghilangkan data penting di kolom `quantity_change`
+
+
 #### Output (Silver)
 Hasil disimpan kembali ke MinIO dalam format Parquet pada folder `silver/`
 ```
@@ -132,7 +138,15 @@ Hasil disimpan kembali ke MinIO dalam format Parquet pada folder `silver/`
   ```
 > Karena output ditulis oleh Spark, masing-masing folder berisi beberapa file part-*.parquet dan marker _SUCCESS
 
-### Cara Menjalankan Proyek
+Hasil dari metode Capping disimpan di folder terpisah, yaitu folder `eda_capping` di MiniO
+```
+  eda_capping/
+  └── stock_transactions/
+      ├── _SUCCESS
+      └── part-00000-***.snappy.parquet
+  ```
+
+### Cara Menjalankan Proyek (Preprocessing)
 1. Jalankan kode berikut untuk memastikan semua service sudah siap dan semua requirement sudah terinstall:
   ```bash
   docker compose up -d
@@ -145,6 +159,20 @@ Hasil disimpan kembali ke MinIO dalam format Parquet pada folder `silver/`
   docker exec -it spark-processor spark-submit /app/scripts/silver_pyspark.py
   ```
 4. Setelah muncul baris `s3a-file-system metrics system shutdown complete`, proses telah selesai. Buka/refresh MiniO ([localhost:9000](http://localhost:9001/)), hasil processing tahap silver dapat dilihat di folder `silver`.
+
+### Cara Menjalankan Proyek (Capping)
+Jalankan kode berikut:
+```bash
+docker exec -it spark-processor spark-submit /app/scripts/eda_capping.py     
+```
+Hasil capping disimpan di MiniO di folder `eda_capping`.
+
+Untuk memverifikasi hasil capping, jalankan kode berikut:
+```bash
+docker-compose run --rm python-eda python scripts/verifikasi_hasil_capping.py
+```
+
+Hasil verifikasi dapat dilihat di terminal, bandingkan output hasil capping dengan output EDA. Setelah capping, nilai MAX akan turun dan outlier berkurang. Plotting dari hasil capping dapat dilihat di folder proyek `verifikasi_capping_output`.
 
 ---
 
