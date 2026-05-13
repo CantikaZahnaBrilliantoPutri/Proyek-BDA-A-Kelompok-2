@@ -45,14 +45,14 @@ OUTPUT_PATH     = f"{BUCKET}/gold/modeling_results/"
 PLOT_DIR        = "plots"          
 
 FEATURE_COLS = [
-    "sales_velocity",
-    "stock_on_hand",
+    # "sales_velocity",
+    # "stock_on_hand",
     "avg_daily_demand",
     "procurement_lead_time",
     "supplier_risk",
-    "order_buffer_index",
+    # "order_buffer_index",
     "inventory_turnover_rate",
-    "log_sales",
+    # "log_sales",
     "demand_to_stock_ratio",
 ]
 

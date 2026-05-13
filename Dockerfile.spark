@@ -7,7 +7,7 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends python3 python3-pip curl && \
     rm -rf /var/lib/apt/lists/*
 
-RUN pip3 install --no-cache-dir pyspark==3.5.1 python-dotenv==1.0.1
+RUN pip3 install pyspark==3.5.1 python-dotenv==1.0.1 matplotlib seaborn
 
 # Tambahkan dependency agar Spark bisa akses s3a:// (MinIO)
 # Letakkan jar di $SPARK_HOME/jars
