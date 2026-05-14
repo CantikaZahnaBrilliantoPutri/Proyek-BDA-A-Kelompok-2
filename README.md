@@ -416,3 +416,36 @@ Output:
   - Visualisasi
   - Insight bisnis
 ```
+
+## Perubahan
+
+yang sudah berubah:
+
+- sumber data `stock_transactions.sql` dan `suppliers_info.json`
+- ganti input path `gold.py` jadi pakai folder data yang sudah di-capping
+- ganti classifier dari Gradient Boost jadi Random Forest di `modelling.py`
+
+Untuk pakai sumber data baru, jalankan:
+
+```bash
+# hapus database lama
+docker exec -it postgres-kelompok2 psql -U postgres -d postgres -c "DROP TABLE stock_move;"   
+
+# buat database baru
+Get-Content data\raw\stock_transactions_new.sql | docker exec -i postgres-kelompok2 psql -U postgres -d postgres   
+
+# jalankan ingestion ulang
+python scripts/ingest_to_datalake.py   
+
+# script silver layer
+docker exec -it spark-processor spark-submit /app/scripts/silver_pyspark.py    
+
+# script gold layer
+docker exec -it spark-processor spark-submit /app/scripts/gold.py           
+
+# capping outlier dari gold
+docker exec -it spark-processor spark-submit /app/scripts/eda_ml.py
+
+# modelling
+docker exec -it spark-processor spark-submit /app/scripts/modeling.py    
+```
