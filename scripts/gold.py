@@ -325,6 +325,7 @@ def main():
 
     gold_features   = f"{BUCKET}/gold/features/"
     gold_aggregates = f"{BUCKET}/gold/aggregates/"
+    # gold_ml_ready   = f"{BUCKET}/gold/ml_ready/"
     gold_ml_ready   = f"{BUCKET}/gold/ml_ready/"
 
     # ── Init ─────────────────────────────────────────────────────────────────

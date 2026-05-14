@@ -50,12 +50,14 @@ from pyspark.ml.evaluation import (
     RegressionEvaluator,
 )
 
+from pyspark.ml.classification import RandomForestClassifier
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 0. CONSTANTS & CONFIG
 # ═══════════════════════════════════════════════════════════════════════════════
 BUCKET          = "s3a://datalake-kelompok2"
-INPUT_PATH      = f"{BUCKET}/gold/ml_ready/"
+INPUT_PATH      = f"{BUCKET}/gold/ml_ready_capped/"
 OUTPUT_PATH     = f"{BUCKET}/gold/modeling_results/"
 # direktori lokal untuk simpan gambar
 PLOT_DIR        = "plots"          
@@ -301,35 +303,92 @@ def train_regressor(train, test):
 # ═══════════════════════════════════════════════════════════════════════════════
 # 6. CLASSIFICATION MODEL — Random Forest Classifier
 # ═══════════════════════════════════════════════════════════════════════════════
+# def train_classifier(train, test):
+#     step = "Classification Model — Gradient Boosting Classifier (optimized)"
+#     log_start(step)
+
+#     # Coba GBT untuk klasifikasi
+#     gbt_clf = GBTClassifier(
+#         featuresCol="features",
+#         labelCol=TARGET_CLF,
+#         predictionCol="stockout_prediction",
+#         **GBT_PARAMS_CLF,
+#     )
+
+#     pipeline_clf = Pipeline(stages=[gbt_clf])
+#     model_clf    = pipeline_clf.fit(train)
+#     pred_clf     = model_clf.transform(test)
+
+#     # Extract probability dari rawPrediction (untuk GBT - convert Vector to Array terlebih dahulu)
+#     pred_clf = pred_clf.withColumn(
+#         "stockout_probability",
+#         vector_to_array(F.col("rawPrediction"))[1].cast("double")
+#     )
+
+#     # Evaluasi
+#     auc = BinaryClassificationEvaluator(
+#         labelCol=TARGET_CLF,
+#         rawPredictionCol="rawPrediction",
+#         metricName="areaUnderROC",
+#     ).evaluate(pred_clf)
+
+#     def eval_mc(metric):
+#         return MulticlassClassificationEvaluator(
+#             labelCol=TARGET_CLF,
+#             predictionCol="stockout_prediction",
+#             metricName=metric,
+#         ).evaluate(pred_clf)
+
+#     accuracy  = eval_mc("accuracy")
+#     precision = eval_mc("weightedPrecision")
+#     recall    = eval_mc("weightedRecall")
+#     f1        = eval_mc("f1")
+
+#     print("\n  ┌─────────────────────────────────┐")
+#     print("  │  CLASSIFICATION METRICS (GBT)   │")
+#     print(f"  │  AUC       : {auc:>8.4f}           │")
+#     print(f"  │  Accuracy  : {accuracy:>8.4f}           │")
+#     print(f"  │  Precision : {precision:>8.4f}           │")
+#     print(f"  │  Recall    : {recall:>8.4f}           │")
+#     print(f"  │  F1-Score  : {f1:>8.4f}           │")
+#     print("  └─────────────────────────────────┘")
+
+#     log_success(step)
+#     return model_clf, pred_clf
+
+
 def train_classifier(train, test):
-    step = "Classification Model — Gradient Boosting Classifier (optimized)"
+    step = "Classification Model — Random Forest Classifier"
     log_start(step)
 
-    # Coba GBT untuk klasifikasi
-    gbt_clf = GBTClassifier(
+    # Inisialisasi Random Forest Classifier
+    rf_clf = RandomForestClassifier(
         featuresCol="features",
         labelCol=TARGET_CLF,
         predictionCol="stockout_prediction",
-        **GBT_PARAMS_CLF,
+        probabilityCol="stockout_probability_vec", # RF menghasilkan vector probability
+        **RF_PARAMS_CLF
     )
 
-    pipeline_clf = Pipeline(stages=[gbt_clf])
+    pipeline_clf = Pipeline(stages=[rf_clf])
     model_clf    = pipeline_clf.fit(train)
     pred_clf     = model_clf.transform(test)
 
-    # Extract probability dari rawPrediction (untuk GBT - convert Vector to Array terlebih dahulu)
+    # Karena RF menghasilkan Vector [P(0), P(1)], kita ambil index 1 untuk probabilitas stockout
     pred_clf = pred_clf.withColumn(
         "stockout_probability",
-        vector_to_array(F.col("rawPrediction"))[1].cast("double")
+        vector_to_array(F.col("stockout_probability_vec"))[1].cast("double")
     )
 
-    # Evaluasi
+    # Evaluasi AUC
     auc = BinaryClassificationEvaluator(
         labelCol=TARGET_CLF,
-        rawPredictionCol="rawPrediction",
+        # Gunakan nama kolom yang Anda definisikan di RandomForestClassifier tadi
+        rawPredictionCol="stockout_probability_vec", 
         metricName="areaUnderROC",
     ).evaluate(pred_clf)
 
+    # Evaluasi Metrics lainnya
     def eval_mc(metric):
         return MulticlassClassificationEvaluator(
             labelCol=TARGET_CLF,
@@ -337,18 +396,13 @@ def train_classifier(train, test):
             metricName=metric,
         ).evaluate(pred_clf)
 
-    accuracy  = eval_mc("accuracy")
-    precision = eval_mc("weightedPrecision")
-    recall    = eval_mc("weightedRecall")
-    f1        = eval_mc("f1")
-
     print("\n  ┌─────────────────────────────────┐")
-    print("  │  CLASSIFICATION METRICS (GBT)   │")
+    print("  │  CLASSIFICATION METRICS (RF)    │")
     print(f"  │  AUC       : {auc:>8.4f}           │")
-    print(f"  │  Accuracy  : {accuracy:>8.4f}           │")
-    print(f"  │  Precision : {precision:>8.4f}           │")
-    print(f"  │  Recall    : {recall:>8.4f}           │")
-    print(f"  │  F1-Score  : {f1:>8.4f}           │")
+    print(f"  │  Accuracy  : {eval_mc('accuracy'):>8.4f}           │")
+    print(f"  │  Precision : {eval_mc('weightedPrecision'):>8.4f}           │")
+    print(f"  │  Recall    : {eval_mc('weightedRecall'):>8.4f}           │")
+    print(f"  │  F1-Score  : {eval_mc('f1'):>8.4f}           │")
     print("  └─────────────────────────────────┘")
 
     log_success(step)
@@ -741,7 +795,7 @@ def main():
     print("  ┌──────────────────────────────────────────────────────────────┐")
     print("  │  OPTIMISASI YANG DITERAPKAN                                  │")
     print("  │  ✓ Feature Scaling (StandardScaler) normalisasi input        │")
-    print("  │  ✓ RF Regressor + GBT Classifier untuk robustness            │")
+    print("  │  ✓ RF Regressor + RF  Classifier untuk robustness            │")
     print("  │  ✓ Hyperparameter tuning (maxDepth=4-6, minInstance=5)       │")
     print("  │  ✓ Subsampling (subsamplingRate=0.8) reduce overfitting      │")
     print("  │  ✓ MAPE metric untuk interpretasi error dalam %              │")
