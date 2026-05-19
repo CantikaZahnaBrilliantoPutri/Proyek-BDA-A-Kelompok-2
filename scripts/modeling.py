@@ -653,7 +653,7 @@ def plot_stockout_distribution(pred_clf):
 # ═══════════════════════════════════════════════════════════════════════════════
 # 10. BUILD FINAL OUTPUT DATAFRAME
 # ═══════════════════════════════════════════════════════════════════════════════
-def build_output(pred_reg, pred_clf):
+def build_output(pred_reg, pred_clf, spark):
     step = "Build Final Output DataFrame"  # section 10
     log_start(step)
 
@@ -668,6 +668,33 @@ def build_output(pred_reg, pred_clf):
     # Gabungkan berdasarkan product_id
     df_out = df_reg.join(df_clf, on="product_id", how="inner")
 
+    # --- Tambahan: ambil product_name dari raw CSV ---
+    try:
+        raw_data_path = "data/raw/Grocery_Inventory.csv"
+        if os.path.exists(raw_data_path):
+            raw_df = spark.read.csv(raw_data_path, header=True, inferSchema=True)
+            log_info(f"Raw CSV columns: {raw_df.columns}")
+            
+            # Gunakan nama kolom yang benar dari CSV: Product_ID dan Product_Name
+            if "Product_ID" in raw_df.columns and "Product_Name" in raw_df.columns:
+                # Select dan rename untuk consistency
+                master_produk = raw_df.select(
+                    F.col("Product_ID").alias("product_id"),
+                    F.col("Product_Name").alias("product_name")
+                ).dropDuplicates(["product_id"])
+                
+                log_info(f"Master produk rows: {master_produk.count()}")
+                
+                # Join dengan output
+                df_out = df_out.join(master_produk, on="product_id", how="left")
+                log_info("✓ Product name berhasil dimuat dari raw CSV")
+            else:
+                log_warn(f"Kolom Product_ID atau Product_Name tidak ditemukan. Available: {raw_df.columns}")
+        else:
+            log_warn(f"File raw CSV tidak ditemukan di: {raw_data_path}")
+    except Exception as e:
+        log_warn(f"Gagal load raw CSV: {str(e)}")
+
     # Kolom rekomendasi bisnis
     df_out = df_out.withColumn(
         "recommendation",
@@ -677,20 +704,23 @@ def build_output(pred_reg, pred_clf):
     )
 
     # Urutkan kolom final
-    df_out = df_out.select(
+    select_cols = [
         "product_id",
+        "product_name" if "product_name" in df_out.columns else None,
         "optimal_rop_pred",
         "stockout_prediction",
         "stockout_probability",
         REF_COL,
         TARGET_REG,
         "recommendation",
-    )
+    ]
+    # filter None jika product_name tidak ada
+    select_cols = [c for c in select_cols if c is not None]
+    df_out = df_out.select(*select_cols)
 
     log_info(f"Final output rows : {df_out.count()}")
     log_success(step)
     return df_out
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 10. TOP-10 PRODUK RISIKO TERTINGGI
@@ -700,28 +730,108 @@ def show_top10(df_out):
     step = "Top-10 Produk Risiko Tertinggi"
     log_start(step)
 
-    # stockout_probability sudah berupa float (di-extract di train_classifier),
-    # jadi tidak perlu vector_to_array() lagi
+    # Ambil kolom penting (tambahkan product_name jika ada)
+    select_cols = [
+        "product_id",
+        "product_name" if "product_name" in df_out.columns else None,
+        REF_COL,
+        "optimal_rop_pred",
+        "stockout_probability"
+    ]
+    select_cols = [c for c in select_cols if c is not None]
     top10_pd = (
         df_out
+        .select(*select_cols)
         .orderBy(F.col("stockout_probability").desc())
         .limit(10)
         .toPandas()
     )
-    
-    # Pastikan tipe data float sebelum round (handle kemungkinan data type issues)
-    top10_pd["stockout_probability"] = pd.to_numeric(top10_pd["stockout_probability"], errors="coerce").round(4)
-    top10_pd["optimal_rop_pred"]     = pd.to_numeric(top10_pd["optimal_rop_pred"], errors="coerce").round(2)
-    top10_pd[REF_COL]                = pd.to_numeric(top10_pd[REF_COL], errors="coerce").round(2)
 
-    print("\n  ╔══════════════════════════════════════════════════════════════════════════════╗")
-    print("  ║          TOP-10 PRODUK DENGAN RISIKO STOCKOUT TERTINGGI                      ║")
-    print("  ╚══════════════════════════════════════════════════════════════════════════════╝")
-    print(top10_pd.to_string(index=False))
+    # Rename kolom
+    rename_dict = {
+        REF_COL: "current_rop",
+        "optimal_rop_pred": "recommended_rop",
+        "stockout_probability": "risk_score"
+    }
+    if "product_name" in top10_pd.columns:
+        rename_dict["product_name"] = "product_name"
+    top10_pd = top10_pd.rename(columns=rename_dict)
+
+    # Rapikan tipe data
+    top10_pd["current_rop"] = pd.to_numeric(
+        top10_pd["current_rop"],
+        errors="coerce"
+    ).round(0).astype("Int64")
+
+    top10_pd["recommended_rop"] = pd.to_numeric(
+        top10_pd["recommended_rop"],
+        errors="coerce"
+    ).round(0).astype("Int64")
+
+    top10_pd["risk_score"] = pd.to_numeric(
+        top10_pd["risk_score"],
+        errors="coerce"
+    ).round(4)
+
+    # Label risiko
+    def risk_label(x):
+        if x >= 0.80:
+            return "🔴 TINGGI"
+        elif x >= 0.50:
+            return "🟡 SEDANG"
+        else:
+            return "🟢 RENDAH"
+
+    top10_pd["stockout_risk"] = top10_pd["risk_score"].apply(risk_label)
+
+    # Rekomendasi
+    top10_pd["recommendation"] = top10_pd.apply(
+        lambda row:
+        f"Tambahkan stok sekitar {row['recommended_rop'] - row['current_rop']} unit"
+        if row["recommended_rop"] > row["current_rop"]
+        else "ROP sudah optimal",
+        axis=1
+    )
+
+    # Final output
+    output_cols = [
+        "product_id",
+        "product_name" if "product_name" in top10_pd.columns else None,
+        "current_rop",
+        "recommended_rop",
+        "stockout_risk",
+        "recommendation"
+    ]
+    output_cols = [c for c in output_cols if c is not None]
+    final_df = top10_pd[output_cols]
+
+    # Header
+    print("\n")
+    print("╔══════════════════════════════════════════════════════════════════════════════╗")
+    print("║                 TOP-10 PRODUK RISIKO STOCKOUT TERTINGGI                      ║")
+    print("╚══════════════════════════════════════════════════════════════════════════════╝")
+
+    # Keterangan kolom
+    print("\nKeterangan Kolom:")
+    print(" current_rop      : reorder point saat ini")
+    print(" recommended_rop  : reorder point hasil prediksi model")
+    print(" stockout_risk    : tingkat risiko kehabisan stok")
+    print(" recommendation   : tindakan yang direkomendasikan model")
+
+    print("\n" + "=" * 80)
+
+    for i, row in final_df.iterrows():
+        print(f"  Produk ID          : {row['product_id']}")
+        print(f"  Nama Produk        : {row.get('product_name', 'N/A')}")
+        print(f"  Current ROP        : {row['current_rop']}")
+        print(f"  Recommended ROP    : {row['recommended_rop']}")
+        print(f"  Risiko Stockout    : {row['stockout_risk']}")
+        print(f"  Rekomendasi        : {row['recommendation']}")
+        print("=" * 80)
 
     log_success(step)
-    return top10_pd
 
+    return final_df
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 11. SIMPAN HASIL KE MINIO
@@ -775,7 +885,7 @@ def main():
     plot_stockout_distribution(pred_clf)
 
     # ── 8. Build Final Output ───────────────────────────────────────────────
-    df_out = build_output(pred_reg, pred_clf)
+    df_out = build_output(pred_reg, pred_clf, spark)
     df_out.cache()
 
     # ── 9. Top-10 Risiko Tertinggi ──────────────────────────────────────────
@@ -790,7 +900,6 @@ def main():
     test.unpersist()
     df_out.unpersist()
 
-    print("\n" + "=" * 70)
     print("  [FINISH] Modeling Pipeline selesai ✅")
     print("  ┌──────────────────────────────────────────────────────────────┐")
     print("  │  OPTIMISASI YANG DITERAPKAN                                  │")
@@ -816,7 +925,6 @@ def main():
     print("  │    • plots/correlation_heatmap.png                           │")
     print("  │    • plots/stockout_distribution.png                         │")
     print("  └──────────────────────────────────────────────────────────────┘")
-    print("=" * 70)
 
     spark.stop()
 
