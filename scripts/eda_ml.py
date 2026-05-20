@@ -50,7 +50,7 @@ def main():
     # Daftar kolom yang memiliki outlier berdasarkan laporan EDA
     # Kita gunakan percentile 0.95 atau 0.99 agar tidak membuang terlalu banyak variansi
     outlier_columns = {
-        "procurement_lead_time": 0.95, 
+        "procurement_lead_time": 0.98, 
         # "reorder_point_new": 0.95, 
         # "sales_velocity": 0.85,
         # "total_sales": 0.99,
