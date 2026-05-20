@@ -441,7 +441,10 @@ python scripts/ingest_to_datalake.py
 docker exec -it spark-processor spark-submit /app/scripts/silver_pyspark.py    
 
 # script gold layer
-docker exec -it spark-processor spark-submit /app/scripts/gold.py           
+docker exec -it spark-processor spark-submit /app/scripts/gold.py
+
+# eda dari gold/ml_ready
+docker-compose run --rm python-eda python scripts/eda.py         
 
 # capping outlier dari gold
 docker exec -it spark-processor spark-submit /app/scripts/eda_ml.py
