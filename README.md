@@ -446,8 +446,11 @@ docker exec -it spark-processor spark-submit /app/scripts/gold.py
 # eda dari gold/ml_ready
 docker-compose run --rm python-eda python scripts/eda.py         
 
-# capping outlier dari gold
+# capping outlier dari gold/ml_ready
 docker exec -it spark-processor spark-submit /app/scripts/eda_ml.py
+
+# verifikasi hasil capping gold/ml_ready
+docker-compose run --rm python-eda python scripts/verifikasi_hasil_capping.py
 
 # modelling
 docker exec -it spark-processor spark-submit /app/scripts/modeling.py    
