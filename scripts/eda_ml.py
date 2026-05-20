@@ -51,10 +51,11 @@ def main():
     # Kita gunakan percentile 0.95 atau 0.99 agar tidak membuang terlalu banyak variansi
     outlier_columns = {
         "procurement_lead_time": 0.95, 
+        # "reorder_point_new": 0.95, 
         # "sales_velocity": 0.85,
-        "total_sales": 0.99,
-        "avg_daily_demand": 0.99,
-        "transaction_frequency": 0.99
+        # "total_sales": 0.99,
+        # "avg_daily_demand": 0.99,
+        # "transaction_frequency": 0.99
         # "demand_to_stock_ratio": 0.90
     }
 
