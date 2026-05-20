@@ -49,6 +49,14 @@ def read_json_from_minio(key: str) -> pd.DataFrame:
     obj = s3.get_object(Bucket=MINIO_BUCKET, Key=key)
     return pd.read_json(BytesIO(obj["Body"].read()))
 
+def read_parquet_from_minio(key: str) -> pd.DataFrame:
+    try:
+        obj = s3.get_object(Bucket=MINIO_BUCKET, Key=key)
+        return pd.read_parquet(BytesIO(obj["Body"].read()))
+    except Exception as e:
+        print(f"Error reading Parquet {key}: {e}")
+        return pd.DataFrame()
+
 def list_files_in_minio(prefix: str):
     """Mengambil semua key file dalam folder/prefix tertentu."""
     try:
@@ -232,7 +240,8 @@ def main():
     output_dir = "eda_output/"
     os.makedirs(output_dir, exist_ok=True)
 
-    folder_prefix = "raw/"
+    folder_prefix = "gold/ml_ready/"
+    # folder_prefix = "raw/"
     file_keys = list_files_in_minio(folder_prefix)
 
     if not file_keys:
@@ -256,6 +265,8 @@ def main():
                 df = read_csv_from_minio(key)
             elif key.endswith('.json'):
                 df = read_json_from_minio(key)
+            elif key.endswith('.parquet'):
+                df = read_parquet_from_minio(key)
             else:
                 print(f"Skip {key}: Format tidak didukung.")
                 continue
